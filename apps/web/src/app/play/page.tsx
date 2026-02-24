@@ -544,7 +544,7 @@ export default function PlayPage() {
       const stats = await fetchDayStats(1);
       setDayStats(stats);
       setStatsLoading(false);
-    }, 2200);
+    }, 1500);
   }, [phase, drawStart, drawCurrent, reset]);
 
   const previewLine = phase === "drawing" && drawStart && drawCurrent
