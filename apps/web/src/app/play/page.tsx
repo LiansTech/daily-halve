@@ -164,13 +164,15 @@ function Apple() {
       {/* Segment lines */}
       {segmentAngles.map((deg, i) => {
         const rad = (deg * Math.PI) / 180;
+        const cos = Math.round(Math.cos(rad) * 1e4) / 1e4;
+        const sin = Math.round(Math.sin(rad) * 1e4) / 1e4;
         return (
           <line
             key={i}
-            x1={CX + Math.cos(rad) * R * 0.19}
-            y1={CY + Math.sin(rad) * R * 0.19}
-            x2={CX + Math.cos(rad) * R * 0.62}
-            y2={CY + Math.sin(rad) * R * 0.62}
+            x1={CX + cos * R * 0.19}
+            y1={CY + sin * R * 0.19}
+            x2={CX + cos * R * 0.62}
+            y2={CY + sin * R * 0.62}
             stroke="#d4b07a"
             strokeWidth="1.5"
             opacity="0.35"
