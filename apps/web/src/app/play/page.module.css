@@ -54,8 +54,8 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  transition: left 0.7s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* After scoring: game slides to left quarter */
@@ -77,8 +77,8 @@
   gap: 1rem;
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.7s cubic-bezier(0.34, 1.1, 0.64, 1),
-              opacity 0.4s ease;
+  transition: transform 0.4s cubic-bezier(0.34, 1.1, 0.64, 1),
+              opacity 0.3s ease;
 }
 
 /* After scoring: results slide in from right */
