@@ -561,7 +561,7 @@ export default function PlayPage() {
         <div />
       </header>
 
-      <main className={styles.main}>
+      <main className={`${styles.main} ${finalScore !== null ? styles.mainScored : ""}`}>
 
         {/* ── Left column: game ── */}
         <div className={styles.gameCol}>
@@ -675,7 +675,7 @@ export default function PlayPage() {
         {/* ── Right column: results ── */}
         <div className={styles.resultsCol}>
 
-          {finalScore !== null && split ? (
+          {finalScore !== null && split && (
             <>
               {/* Score */}
               <div className={styles.scorePanel}>
@@ -726,10 +726,6 @@ export default function PlayPage() {
                 ) : null}
               </div>
             </>
-          ) : (
-            <div className={styles.resultsPlaceholder}>
-              <p>Make your cut to see results</p>
-            </div>
           )}
 
         </div>{/* end resultsCol */}

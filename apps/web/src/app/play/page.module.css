@@ -35,44 +35,57 @@
   color: var(--text);
 }
 
-/* ── Main two-column layout ───────────────────────────────────────── */
+/* ── Main ─────────────────────────────────────────────────────────── */
 .main {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  padding: 1.25rem 2.5rem;
+  position: relative;
   height: calc(100dvh - 57px);
   overflow: hidden;
-  align-items: center;
 }
 
-/* ── Left column: game ────────────────────────────────────────────── */
+/* ── Game column ──────────────────────────────────────────────────── */
 .gameCol {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 44vw);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 0.75rem;
-  height: 100%;
+  transition: left 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Right column: results ────────────────────────────────────────── */
+/* After scoring: game slides to left quarter */
+.mainScored .gameCol {
+  left: 25%;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Results column ───────────────────────────────────────────────── */
 .resultsCol {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: min(480px, 46vw);
+  transform: translateY(-50%) translateX(110%);
+  padding: 0 2.5rem 0 0.5rem;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 1rem;
-  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.7s cubic-bezier(0.34, 1.1, 0.64, 1),
+              opacity 0.4s ease;
 }
 
-.resultsPlaceholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  font-size: 0.875rem;
-  color: #333;
+/* After scoring: results slide in from right */
+.mainScored .resultsCol {
+  transform: translateY(-50%) translateX(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Instruction ──────────────────────────────────────────────────── */
@@ -137,10 +150,8 @@
 
 /* ── SVG game area ────────────────────────────────────────────────── */
 .svgWrap {
-  /* Fit within available column width AND available height */
-  width: min(100%, calc(100dvh - 57px - 2.5rem - 1.8rem - 160px - 2.5rem));
+  width: 100%;
   aspect-ratio: 1;
-  max-width: 420px;
 }
 
 .gameSvg {
@@ -353,35 +364,54 @@
   overflow: visible;
 }
 
-/* ── Mobile: single column ────────────────────────────────────────── */
+/* ── Mobile: single column, no absolute positioning ──────────────── */
 @media (max-width: 768px) {
   .main {
-    grid-template-columns: 1fr;
     height: auto;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     padding: 1rem 1.25rem 2rem;
-    align-items: start;
     gap: 1.25rem;
   }
 
   .gameCol {
-    height: auto;
-    gap: 0.75rem;
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    width: min(90vw, 340px);
+    transition: none;
+  }
+
+  .mainScored .gameCol {
+    left: auto;
+    transform: none;
   }
 
   .resultsCol {
-    height: auto;
+    position: relative;
+    top: auto;
+    right: auto;
+    transform: none;
+    width: 100%;
+    max-width: 420px;
+    padding: 0;
+    opacity: 1;
+    pointer-events: auto;
+    transition: none;
   }
 
-  .svgWrap {
-    width: min(90vw, 320px);
+  .mainScored .resultsCol {
+    transform: none;
   }
 
   .scorePanel {
     align-items: center;
   }
 
-  .resultsPlaceholder {
-    display: none;
+  .svgWrap {
+    width: 100%;
   }
 }
