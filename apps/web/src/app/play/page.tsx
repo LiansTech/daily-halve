@@ -563,6 +563,9 @@ export default function PlayPage() {
 
       <main className={styles.main}>
 
+        {/* ── Left column: game ── */}
+        <div className={styles.gameCol}>
+
         {/* Instruction */}
         <div className={styles.instructionWrap}>
           <p className={`${styles.instruction} ${phase === "idle" ? styles.show : ""}`}>
@@ -667,59 +670,69 @@ export default function PlayPage() {
           />
         )}
 
-        {/* Score panel */}
-        {finalScore !== null && split && (
-          <div className={styles.scorePanel}>
-            <div className={styles.scoreTop}>
-              <span className={styles.scoreNumber}>{finalScore}</span>
-              <span className={styles.scoreMax}>&nbsp;/ 1000</span>
-            </div>
-            <p className={styles.scoreTag}>{scoreLabel(finalScore)}</p>
-            <p className={styles.splitDetail}>
-              {split.leftPct.toFixed(2)}%&nbsp;&nbsp;·&nbsp;&nbsp;{split.rightPct.toFixed(2)}%
-            </p>
-            <div className={styles.actionRow}>
-              <button className={styles.shareBtn} onClick={handleShare}>
-                {copied ? "✓ Copied!" : "Share result"}
-              </button>
-              <button className={styles.retryBtn} onClick={reset}>
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
+        </div>{/* end gameCol */}
 
-        {/* Day stats */}
-        {(statsLoading || dayStats) && finalScore !== null && (
-          <div className={styles.statsPanel}>
-            {statsLoading ? (
-              <p className={styles.statsLoading}>Loading stats…</p>
-            ) : dayStats ? (
-              <>
-                <DistributionChart scores={dayStats.scores} playerScore={finalScore} />
+        {/* ── Right column: results ── */}
+        <div className={styles.resultsCol}>
 
-                <div className={styles.statsRow}>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{dayStats.totalPlays}</span>
-                    <span className={styles.statLabel}>Players</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{dayStats.avgScore}</span>
-                    <span className={styles.statLabel}>Avg score</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{dayStats.avgLeftPct.toFixed(1)}%</span>
-                    <span className={styles.statLabel}>Avg cut</span>
-                  </div>
-                  <div className={styles.statCard}>
-                    <span className={styles.statValue}>{dayStats.bestLeftPct.toFixed(1)}%</span>
-                    <span className={styles.statLabel}>Best cut</span>
-                  </div>
+          {finalScore !== null && split ? (
+            <>
+              {/* Score */}
+              <div className={styles.scorePanel}>
+                <div className={styles.scoreTop}>
+                  <span className={styles.scoreNumber}>{finalScore}</span>
+                  <span className={styles.scoreMax}>&nbsp;/ 1000</span>
                 </div>
-              </>
-            ) : null}
-          </div>
-        )}
+                <p className={styles.scoreTag}>{scoreLabel(finalScore)}</p>
+                <p className={styles.splitDetail}>
+                  {split.leftPct.toFixed(2)}%&nbsp;&nbsp;·&nbsp;&nbsp;{split.rightPct.toFixed(2)}%
+                </p>
+                <div className={styles.actionRow}>
+                  <button className={styles.shareBtn} onClick={handleShare}>
+                    {copied ? "✓ Copied!" : "Share result"}
+                  </button>
+                  <button className={styles.retryBtn} onClick={reset}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className={styles.statsPanel}>
+                {statsLoading ? (
+                  <p className={styles.statsLoading}>Loading stats…</p>
+                ) : dayStats ? (
+                  <>
+                    <DistributionChart scores={dayStats.scores} playerScore={finalScore} />
+                    <div className={styles.statsRow}>
+                      <div className={styles.statCard}>
+                        <span className={styles.statValue}>{dayStats.totalPlays}</span>
+                        <span className={styles.statLabel}>Players</span>
+                      </div>
+                      <div className={styles.statCard}>
+                        <span className={styles.statValue}>{dayStats.avgScore}</span>
+                        <span className={styles.statLabel}>Avg score</span>
+                      </div>
+                      <div className={styles.statCard}>
+                        <span className={styles.statValue}>{dayStats.avgLeftPct.toFixed(1)}%</span>
+                        <span className={styles.statLabel}>Avg cut</span>
+                      </div>
+                      <div className={styles.statCard}>
+                        <span className={styles.statValue}>{dayStats.bestLeftPct.toFixed(1)}%</span>
+                        <span className={styles.statLabel}>Best cut</span>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className={styles.resultsPlaceholder}>
+              <p>Make your cut to see results</p>
+            </div>
+          )}
+
+        </div>{/* end resultsCol */}
 
       </main>
     </div>
