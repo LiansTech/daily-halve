@@ -376,59 +376,124 @@
   overflow: visible;
 }
 
-/* ── Mobile: single column, no absolute positioning ──────────────── */
+/* ── Mobile ───────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .header {
+    padding: 0.75rem 1.25rem;
+  }
+
+  /* Full-height scrollable page */
   .main {
     height: auto;
+    min-height: calc(100dvh - 49px);
     overflow-y: auto;
+    display: block;
+    padding: 0;
+  }
+
+  /* Reset the desktop horizontal slide — stack vertically */
+  .inner {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1rem 1.25rem 2rem;
-    gap: 1.25rem;
-  }
-
-  .gameCol {
-    position: relative;
-    top: auto;
-    left: auto;
-    transform: none;
-    width: min(90vw, 340px);
+    transform: none !important;
     transition: none;
-  }
-
-  .mainScored .gameCol {
-    left: auto;
-    transform: none;
-  }
-
-  .resultsCol {
-    position: relative;
-    top: auto;
-    right: auto;
-    transform: none;
+    gap: 0;
+    padding: 1.25rem 1.25rem 3rem;
     width: 100%;
-    max-width: 420px;
-    padding: 0;
-    opacity: 1;
-    pointer-events: auto;
-    transition: none;
+  }
+
+  /* Apple SVG: nearly full width */
+  .gameCol {
+    width: min(90vw, 400px);
+    gap: 0.5rem;
+  }
+
+  /* Results appear below the apple after scoring */
+  .resultsCol {
+    width: 100%;
+    max-width: 440px;
+    margin-top: 1.75rem;
+    gap: 0.85rem;
+    opacity: 0;
+    transform: translateY(16px);
+    pointer-events: none;
+    transition: opacity 0.4s ease 0.1s, transform 0.4s ease 0.1s;
   }
 
   .mainScored .resultsCol {
-    transform: none;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
   }
 
+  /* Stack score text above the balance scale */
   .scoreScaleRow {
     flex-direction: column;
     align-items: center;
+    gap: 0.5rem;
+    width: 100%;
   }
 
   .scorePanel {
     align-items: center;
+    width: 100%;
   }
 
-  .svgWrap {
+  .scoreNumber {
+    font-size: clamp(2.8rem, 14vw, 3.5rem);
+  }
+
+  /* Scale bigger when centred on its own row */
+  .scale {
+    width: 210px;
+  }
+
+  /* Buttons full-width row */
+  .actionRow {
     width: 100%;
+    margin-top: 0.4rem;
+    justify-content: center;
+  }
+
+  .shareBtn,
+  .retryBtn {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+
+  /* Stats panel */
+  .statsPanel {
+    padding: 0.85rem 1rem;
+    gap: 0.6rem;
+  }
+
+  .statsRow {
+    gap: 0.4rem;
+  }
+
+  .statCard {
+    padding: 0.55rem 0.2rem;
+  }
+
+  .statValue {
+    font-size: 1rem;
+  }
+
+  .statLabel {
+    font-size: 0.6rem;
+  }
+
+  .chartSvg {
+    height: 60px;
+  }
+
+  .percentileValue {
+    font-size: 1.5rem;
+  }
+
+  .percentileLabel {
+    font-size: 0.75rem;
   }
 }
