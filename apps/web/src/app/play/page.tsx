@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
+import { saveResult, fetchDayStats, type DayStats } from "@/lib/supabase";
 
 // ── SVG canvas ───────────────────────────────────────────────────────────────
 const W = 440;
@@ -312,6 +313,8 @@ export default function PlayPage() {
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [invalidCut, setInvalidCut] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [dayStats, setDayStats] = useState<DayStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const handleShare = useCallback(() => {
     if (!split || finalScore === null) return;
@@ -331,6 +334,7 @@ export default function PlayPage() {
     setDrawStart(null);
     setDrawCurrent(null);
     setInvalidCut(false);
+    setDayStats(null);
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
@@ -369,9 +373,17 @@ export default function PlayPage() {
 
     // small delay so first render draws halves in place, then animate apart
     setTimeout(() => setSplitting(true), 80);
-    setTimeout(() => {
-      setFinalScore(calcScore(result.leftPct));
+    setTimeout(async () => {
+      const s = calcScore(result.leftPct);
+      setFinalScore(s);
       setPhase("scored");
+
+      // save result then fetch updated stats
+      setStatsLoading(true);
+      await saveResult(1, result.leftPct, result.rightPct, s);
+      const stats = await fetchDayStats(1);
+      setDayStats(stats);
+      setStatsLoading(false);
     }, 2200);
   }, [phase, drawStart, drawCurrent, reset]);
 
@@ -516,6 +528,60 @@ export default function PlayPage() {
                 Try again
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Day stats */}
+        {(statsLoading || dayStats) && (
+          <div className={styles.statsPanel}>
+            <p className={styles.statsTitle}>Today&apos;s stats</p>
+            {statsLoading ? (
+              <p className={styles.statsLoading}>Loading…</p>
+            ) : dayStats ? (
+              <>
+                <div className={styles.statsRow}>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{dayStats.totalPlays}</span>
+                    <span className={styles.statLabel}>Players</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{dayStats.avgScore}</span>
+                    <span className={styles.statLabel}>Avg score</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{dayStats.avgLeftPct.toFixed(1)}%</span>
+                    <span className={styles.statLabel}>Avg cut</span>
+                  </div>
+                  <div className={styles.statCard}>
+                    <span className={styles.statValue}>{dayStats.bestLeftPct.toFixed(1)}%</span>
+                    <span className={styles.statLabel}>Best cut</span>
+                  </div>
+                </div>
+
+                {/* Score distribution */}
+                <div className={styles.distWrap}>
+                  {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((bracket) => {
+                    const entry = dayStats.distribution.find((d) => d.bracket === bracket);
+                    const count = entry?.count ?? 0;
+                    const max = Math.max(...dayStats.distribution.map((d) => d.count), 1);
+                    const fill = (count / max) * 100;
+                    const color =
+                      bracket >= 900 ? "#b8f04a" :
+                      bracket >= 700 ? "#f0c84a" :
+                      bracket >= 500 ? "#f09a4a" : "#f04a4a";
+                    return (
+                      <div key={bracket} className={styles.distRow}>
+                        <span className={styles.distLabel}>{bracket === 900 ? "900+" : bracket}</span>
+                        <div className={styles.distTrack}>
+                          <div className={styles.distFill} style={{ width: `${fill}%`, background: color }} />
+                        </div>
+                        <span className={styles.distCount}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 
