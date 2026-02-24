@@ -38,52 +38,52 @@
 /* ── Main ─────────────────────────────────────────────────────────── */
 .main {
   flex: 1;
-  position: relative;
   height: calc(100dvh - 57px);
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inner flex row holding both columns */
+.inner {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  /* Shift right by half the results column width + half the gap
+     so only the game column is visible and centered before scoring */
+  --results-w: min(460px, 44vw);
+  transform: translateX(calc((var(--results-w) + 3rem) / 2));
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mainScored .inner {
+  transform: translateX(0);
 }
 
 /* ── Game column ──────────────────────────────────────────────────── */
 .gameCol {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(420px, 44vw);
+  flex-shrink: 0;
+  width: min(400px, 40vw);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* After scoring: game slides to left quarter */
-.mainScored .gameCol {
-  left: 25%;
-  transform: translate(-50%, -50%);
 }
 
 /* ── Results column ───────────────────────────────────────────────── */
 .resultsCol {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: min(480px, 46vw);
-  transform: translateY(-50%) translateX(110%);
-  padding: 0 2.5rem 0 0.5rem;
+  flex-shrink: 0;
+  width: var(--results-w);
   display: flex;
   flex-direction: column;
   gap: 1rem;
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.4s cubic-bezier(0.34, 1.1, 0.64, 1),
-              opacity 0.3s ease;
+  transition: opacity 0.35s ease 0.15s;
 }
 
-/* After scoring: results slide in from right */
 .mainScored .resultsCol {
-  transform: translateY(-50%) translateX(0);
   opacity: 1;
   pointer-events: auto;
 }
@@ -171,6 +171,10 @@
 
 /* ── Balance scale ────────────────────────────────────────────────── */
 .scale {
+  display: block;
+  width: 190px;
+  height: auto;
+  flex-shrink: 0;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.5s ease 0.4s, transform 0.5s ease 0.4s;
@@ -182,6 +186,8 @@
 
 /* ── Score panel ──────────────────────────────────────────────────── */
 .scorePanel {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -228,12 +234,18 @@
   letter-spacing: 0.02em;
 }
 
+.scoreScaleRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
 .actionRow {
   display: flex;
   gap: 0.75rem;
   margin-top: 0.75rem;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
 .shareBtn {
@@ -405,6 +417,11 @@
 
   .mainScored .resultsCol {
     transform: none;
+  }
+
+  .scoreScaleRow {
+    flex-direction: column;
+    align-items: center;
   }
 
   .scorePanel {

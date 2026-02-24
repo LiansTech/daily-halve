@@ -294,26 +294,10 @@ function BalanceScale({ leftPct, rightPct, visible }: {
 // ── Distribution chart ────────────────────────────────────────────────────────
 const CHART_W = 380;
 const CHART_H = 88;
-const BUCKETS = 20;
-const BUCKET_SIZE = 1000 / BUCKETS; // 50 pts each
-
-function catmullRom(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return "";
-  const get = (i: number) => pts[Math.max(0, Math.min(pts.length - 1, i))]!;
-  let d = `M ${get(0).x.toFixed(1)},${get(0).y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = get(i - 1);
-    const p1 = get(i);
-    const p2 = get(i + 1);
-    const p3 = get(i + 2);
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-  }
-  return d;
-}
+const BELL_MU = 0.5;
+const BELL_SIGMA = 0.2;
+const gaussian = (t: number) =>
+  Math.exp(-((t - BELL_MU) ** 2) / (2 * BELL_SIGMA ** 2));
 
 function DistributionChart({
   scores,
@@ -322,43 +306,38 @@ function DistributionChart({
   scores: number[];
   playerScore: number;
 }) {
-  const counts = Array.from<number>({ length: BUCKETS }).fill(0) as number[];
-  for (const s of scores) {
-    const idx = Math.min(BUCKETS - 1, Math.floor(s / BUCKET_SIZE));
-    counts[idx] = (counts[idx] ?? 0) + 1;
-  }
-  const maxCount = Math.max(...counts, 1);
-  const barW = CHART_W / BUCKETS;
-  const PAD_TOP = 12;
-  const usableH = CHART_H - PAD_TOP;
-
-  // Points at the top-centre of each bar for the smooth curve
-  const curvePts = counts.map((c, i) => ({
-    x: (i + 0.5) * barW,
-    y: PAD_TOP + usableH - (c / maxCount) * usableH * 0.92,
-  }));
-
-  const linePath = catmullRom(curvePts);
-  const areaPath =
-    linePath +
-    ` L ${CHART_W},${CHART_H} L 0,${CHART_H} Z`;
-
-  const playerX = (playerScore / 1000) * CHART_W;
-  const playerBucket = Math.min(BUCKETS - 1, Math.floor(playerScore / BUCKET_SIZE));
-
-  // percentile: fraction of scores strictly below the player
+  // Use scores only to compute the player's percentile
   const below = scores.filter((s) => s < playerScore).length;
   const topPct = Math.max(1, Math.round((1 - below / scores.length) * 100));
+  // playerX: position from left = fraction of players below this score
+  const playerX = scores.length > 1
+    ? (below / scores.length) * CHART_W
+    : CHART_W / 2;
+
+  // Build Gaussian bell curve path (always normal distribution)
+  const STEPS = 120;
+  const PAD_TOP = 10;
+  const usableH = CHART_H - PAD_TOP - 10; // leave room for x-axis labels
+  const pts = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const t = i / STEPS;
+    return {
+      x: t * CHART_W,
+      y: PAD_TOP + usableH * (1 - gaussian(t) * 0.95),
+    };
+  });
+
+  const linePath = pts
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(" ");
+  const areaPath = `${linePath} L${CHART_W},${CHART_H} L0,${CHART_H} Z`;
 
   return (
     <div className={styles.chartWrap}>
-      {/* Percentile headline */}
       <div className={styles.percentileRow}>
         <span className={styles.percentileValue}>Top {topPct}%</span>
         <span className={styles.percentileLabel}>of {scores.length} players today</span>
       </div>
 
-      {/* SVG chart */}
       <svg
         viewBox={`0 0 ${CHART_W} ${CHART_H}`}
         className={styles.chartSvg}
@@ -366,44 +345,25 @@ function DistributionChart({
       >
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#b8f04a" stopOpacity="0.18" />
+            <stop offset="0%" stopColor="#b8f04a" stopOpacity="0.15" />
             <stop offset="100%" stopColor="#b8f04a" stopOpacity="0.02" />
           </linearGradient>
-          {/* Clip left of player */}
           <clipPath id="clipLeft">
             <rect x="0" y="0" width={playerX} height={CHART_H} />
           </clipPath>
-          {/* Clip right of player */}
           <clipPath id="clipRight">
             <rect x={playerX} y="0" width={CHART_W - playerX} height={CHART_H} />
           </clipPath>
         </defs>
 
-        {/* Bars */}
-        {counts.map((c, i) => {
-          const h = (c / maxCount) * usableH * 0.92;
-          const isPlayer = i === playerBucket;
-          return (
-            <rect
-              key={i}
-              x={i * barW + 1}
-              y={PAD_TOP + usableH - h}
-              width={barW - 2}
-              height={h}
-              rx="2"
-              fill={isPlayer ? "rgba(184,240,74,0.35)" : "#1e1e1e"}
-            />
-          );
-        })}
-
-        {/* Filled area — muted left, accent right of player */}
+        {/* Area fill — muted left of player, accent right */}
         <path d={areaPath} fill="url(#areaGrad)" clipPath="url(#clipLeft)" />
-        <path d={areaPath} fill="rgba(184,240,74,0.10)" clipPath="url(#clipRight)" />
+        <path d={areaPath} fill="rgba(184,240,74,0.12)" clipPath="url(#clipRight)" />
 
-        {/* Smooth curve line */}
-        <path d={linePath} fill="none" stroke="#444" strokeWidth="1.5" />
+        {/* Bell curve */}
+        <path d={linePath} fill="none" stroke="#555" strokeWidth="1.5" />
 
-        {/* Player vertical line */}
+        {/* Player line */}
         <line
           x1={playerX} y1={0}
           x2={playerX} y2={CHART_H}
@@ -412,7 +372,7 @@ function DistributionChart({
           strokeDasharray="4 3"
         />
 
-        {/* "You" label */}
+        {/* YOU label */}
         <rect
           x={Math.min(playerX - 16, CHART_W - 36)}
           y={1} width={32} height={14} rx={4}
@@ -431,17 +391,17 @@ function DistributionChart({
         </text>
 
         {/* X-axis labels */}
-        {[0, 250, 500, 750, 1000].map((v) => (
+        {["Worst", "Best"].map((label, i) => (
           <text
-            key={v}
-            x={(v / 1000) * CHART_W}
+            key={label}
+            x={i === 0 ? 4 : CHART_W - 4}
             y={CHART_H - 1}
-            textAnchor="middle"
-            fill="#555"
+            textAnchor={i === 0 ? "start" : "end"}
+            fill="#444"
             fontSize="7"
             fontFamily="system-ui"
           >
-            {v}
+            {label}
           </text>
         ))}
       </svg>
@@ -564,6 +524,7 @@ export default function PlayPage() {
       </header>
 
       <main className={`${styles.main} ${finalScore !== null ? styles.mainScored : ""}`}>
+        <div className={styles.inner}>
 
         {/* ── Left column: game ── */}
         <div className={styles.gameCol}>
@@ -663,15 +624,6 @@ export default function PlayPage() {
           </svg>
         </div>
 
-        {/* Balance scale */}
-        {split && (
-          <BalanceScale
-            leftPct={split.leftPct}
-            rightPct={split.rightPct}
-            visible={splitting}
-          />
-        )}
-
         </div>{/* end gameCol */}
 
         {/* ── Right column: results ── */}
@@ -679,24 +631,31 @@ export default function PlayPage() {
 
           {finalScore !== null && split && (
             <>
-              {/* Score */}
-              <div className={styles.scorePanel}>
-                <div className={styles.scoreTop}>
-                  <span className={styles.scoreNumber}>{finalScore}</span>
-                  <span className={styles.scoreMax}>&nbsp;/ 1000</span>
+              {/* Score + Scale side by side */}
+              <div className={styles.scoreScaleRow}>
+                <div className={styles.scorePanel}>
+                  <div className={styles.scoreTop}>
+                    <span className={styles.scoreNumber}>{finalScore}</span>
+                    <span className={styles.scoreMax}>&nbsp;/ 1000</span>
+                  </div>
+                  <p className={styles.scoreTag}>{scoreLabel(finalScore)}</p>
+                  <p className={styles.splitDetail}>
+                    {split.leftPct.toFixed(2)}%&nbsp;&nbsp;·&nbsp;&nbsp;{split.rightPct.toFixed(2)}%
+                  </p>
+                  <div className={styles.actionRow}>
+                    <button className={styles.shareBtn} onClick={handleShare}>
+                      {copied ? "✓ Copied!" : "Share result"}
+                    </button>
+                    <button className={styles.retryBtn} onClick={reset}>
+                      Try again
+                    </button>
+                  </div>
                 </div>
-                <p className={styles.scoreTag}>{scoreLabel(finalScore)}</p>
-                <p className={styles.splitDetail}>
-                  {split.leftPct.toFixed(2)}%&nbsp;&nbsp;·&nbsp;&nbsp;{split.rightPct.toFixed(2)}%
-                </p>
-                <div className={styles.actionRow}>
-                  <button className={styles.shareBtn} onClick={handleShare}>
-                    {copied ? "✓ Copied!" : "Share result"}
-                  </button>
-                  <button className={styles.retryBtn} onClick={reset}>
-                    Try again
-                  </button>
-                </div>
+                <BalanceScale
+                  leftPct={split.leftPct}
+                  rightPct={split.rightPct}
+                  visible={splitting}
+                />
               </div>
 
               {/* Stats */}
@@ -731,6 +690,7 @@ export default function PlayPage() {
           )}
 
         </div>{/* end resultsCol */}
+        </div>{/* end inner */}
 
       </main>
     </div>
