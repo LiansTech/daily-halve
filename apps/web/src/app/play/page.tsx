@@ -134,6 +134,7 @@ type Phase = "idle" | "cut" | "scored";
 
 export default function PlayPage() {
   const [phase, setPhase] = useState<Phase>("idle");
+  const [sceneKey, setSceneKey] = useState(0);
   const [cutResult, setCutResult] = useState<CutResult | null>(null);
   const [scaleVisible, setScaleVisible] = useState(false);
   const [finalScore, setFinalScore] = useState<number | null>(null);
@@ -165,6 +166,7 @@ export default function PlayPage() {
 
   const reset = useCallback(() => {
     setPhase("idle");
+    setSceneKey(k => k + 1);
     setCutResult(null);
     setScaleVisible(false);
     setFinalScore(null);
@@ -209,6 +211,7 @@ export default function PlayPage() {
 
             <div className={styles.svgWrap}>
               <AppleScene
+                key={sceneKey}
                 phase={phase}
                 onCut={handleCut}
                 onInvalidCut={handleInvalidCut}
