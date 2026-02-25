@@ -1,322 +1,280 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, MeshDistortMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { ADDITION, SUBTRACTION, Evaluator, Brush } from "three-bvh-csg";
+import { SUBTRACTION, Evaluator, Brush } from "three-bvh-csg";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Public types ──────────────────────────────────────────────────────────────
 export interface CutResult {
   leftVolumePct: number;
   rightVolumePct: number;
 }
 
-interface AppleSceneProps {
-  phase: "idle" | "drawing" | "cut" | "scored";
+interface Props {
+  phase: "idle" | "cut" | "scored";
   onCut: (result: CutResult) => void;
   onInvalidCut: () => void;
 }
 
-// ── Volume helper ─────────────────────────────────────────────────────────────
-function meshVolume(geometry: THREE.BufferGeometry): number {
-  const pos = geometry.attributes.position;
+// ── Signed-tetrahedra volume (works on indexed geometry) ──────────────────────
+function meshVolume(geo: THREE.BufferGeometry): number {
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const idx = geo.getIndex();
   if (!pos) return 0;
-  let vol = 0;
-  for (let i = 0; i < pos.count; i += 3) {
-    const ax = pos.getX(i),   ay = pos.getY(i),   az = pos.getZ(i);
-    const bx = pos.getX(i+1), by = pos.getY(i+1), bz = pos.getZ(i+1);
-    const cx = pos.getX(i+2), cy = pos.getY(i+2), cz = pos.getZ(i+2);
-    vol += (ax * (by * cz - bz * cy)
-          + bx * (cy * az - cz * ay)
-          + cx * (ay * bz - az * by)) / 6;
+  let v = 0;
+  const count = idx ? idx.count : pos.count;
+  for (let i = 0; i < count; i += 3) {
+    const ai = idx ? idx.getX(i)     : i;
+    const bi = idx ? idx.getX(i + 1) : i + 1;
+    const ci = idx ? idx.getX(i + 2) : i + 2;
+    const ax = pos.getX(ai), ay = pos.getY(ai), az = pos.getZ(ai);
+    const bx = pos.getX(bi), by = pos.getY(bi), bz = pos.getZ(bi);
+    const cx = pos.getX(ci), cy = pos.getY(ci), cz = pos.getZ(ci);
+    v += ax * (by * cz - bz * cy)
+       + bx * (cy * az - cz * ay)
+       + cx * (ay * bz - az * by);
   }
-  return Math.abs(vol);
+  return Math.abs(v) / 6;
 }
 
-// ── Apple mesh ────────────────────────────────────────────────────────────────
+// ── Apple ─────────────────────────────────────────────────────────────────────
 function AppleMesh({ visible }: { visible: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame((_, delta) => {
-    if (meshRef.current && visible) {
-      meshRef.current.rotation.y += delta * 0.4;
-    }
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((_, dt) => {
+    if (ref.current && visible) ref.current.rotation.y += dt * 0.5;
   });
-
   return (
-    <mesh ref={meshRef} visible={visible} castShadow>
-      {/* Slightly squashed sphere for apple shape */}
+    <mesh ref={ref} visible={visible}>
       <sphereGeometry args={[1.15, 64, 64]} />
-      <meshStandardMaterial
-        color="#bf4730"
-        roughness={0.35}
-        metalness={0.05}
-      />
+      <meshStandardMaterial color="#bf4730" roughness={0.3} metalness={0.08} />
     </mesh>
   );
 }
 
-// ── Cut halves ────────────────────────────────────────────────────────────────
-interface HalfProps {
+// ── One cut half ──────────────────────────────────────────────────────────────
+function Half({
+  geometry,
+  direction,
+  go,
+}: {
   geometry: THREE.BufferGeometry;
   direction: THREE.Vector3;
-  splitting: boolean;
-}
+  go: boolean;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  const cur = useRef(new THREE.Vector3());
+  const tgt = direction.clone().multiplyScalar(go ? 0.65 : 0);
 
-function CutHalf({ geometry, direction, splitting }: HalfProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const targetPos = direction.clone().multiplyScalar(splitting ? 0.55 : 0);
-  const currentPos = useRef(new THREE.Vector3());
-
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    currentPos.current.lerp(targetPos, 1 - Math.pow(0.01, delta * 4));
-    meshRef.current.position.copy(currentPos.current);
+  useFrame((_, dt) => {
+    if (!ref.current) return;
+    cur.current.lerp(tgt, 1 - Math.pow(0.004, dt));
+    ref.current.position.copy(cur.current);
   });
 
   return (
-    <mesh ref={meshRef} geometry={geometry} castShadow>
-      <meshStandardMaterial color="#bf4730" roughness={0.35} metalness={0.05} side={THREE.DoubleSide} />
-    </mesh>
-  );
-}
-
-// ── Cut plane visualiser (the blade preview while dragging) ───────────────────
-function CutPlanePreview({
-  planeNormal,
-  planePoint,
-  visible,
-}: {
-  planeNormal: THREE.Vector3;
-  planePoint: THREE.Vector3;
-  visible: boolean;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useEffect(() => {
-    if (!meshRef.current || !visible) return;
-    // Orient the blade plane to match the cut normal
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), planeNormal);
-    meshRef.current.quaternion.copy(quaternion);
-    meshRef.current.position.copy(planePoint);
-  }, [planeNormal, planePoint, visible]);
-
-  if (!visible) return null;
-
-  return (
-    <mesh ref={meshRef}>
-      <planeGeometry args={[4, 4]} />
-      <meshBasicMaterial
-        color="#b8f04a"
-        transparent
-        opacity={0.18}
+    <mesh ref={ref} geometry={geometry}>
+      <meshStandardMaterial
+        color="#bf4730"
+        roughness={0.3}
+        metalness={0.08}
         side={THREE.DoubleSide}
-        depthWrite={false}
       />
     </mesh>
   );
 }
 
 // ── Main scene ────────────────────────────────────────────────────────────────
-function Scene({ phase, onCut, onInvalidCut }: AppleSceneProps) {
-  const { camera, gl, size } = useThree();
+function Scene({ phase, onCut, onInvalidCut }: Props) {
+  const { camera, gl } = useThree();
+
   const [halves, setHalves] = useState<{
-    left: THREE.BufferGeometry;
-    right: THREE.BufferGeometry;
-    leftDir: THREE.Vector3;
-    rightDir: THREE.Vector3;
+    geoA: THREE.BufferGeometry;
+    geoB: THREE.BufferGeometry;
+    dirA: THREE.Vector3;
+    dirB: THREE.Vector3;
   } | null>(null);
   const [splitting, setSplitting] = useState(false);
-  const [dragStart, setDragStart] = useState<THREE.Vector2 | null>(null);
-  const [dragEnd, setDragEnd] = useState<THREE.Vector2 | null>(null);
 
-  // Convert NDC to a world-space cut plane
-  const buildCutPlane = useCallback((
-    startNDC: THREE.Vector2,
-    endNDC: THREE.Vector2,
-  ): { normal: THREE.Vector3; point: THREE.Vector3 } => {
-    // Unproject both endpoints at z=0 (near) and z=0.5 (mid) to get world rays
-    const toWorld = (ndc: THREE.Vector2, z: number) => {
-      const v = new THREE.Vector3(ndc.x, ndc.y, z).unproject(camera);
-      return v;
-    };
+  // Drag state in refs — no re-renders while dragging
+  const drag = useRef<{ start: THREE.Vector2; end: THREE.Vector2 } | null>(null);
+  const previewRef = useRef<THREE.Mesh>(null);
 
-    const s0 = toWorld(startNDC, 0);
-    const e0 = toWorld(endNDC, 0);
-    const s1 = toWorld(startNDC, 0.5);
-
-    // Cut plane: defined by the line direction and the camera depth direction
-    const lineDir = new THREE.Vector3().subVectors(e0, s0).normalize();
-    const depthDir = new THREE.Vector3().subVectors(s1, s0).normalize();
-    const normal = new THREE.Vector3().crossVectors(lineDir, depthDir).normalize();
-
-    // Point on plane = midpoint of the line at z=0
-    const mid = new THREE.Vector3().addVectors(s0, e0).multiplyScalar(0.5);
-
-    return { normal, point: mid };
-  }, [camera]);
-
-  const performCut = useCallback((
-    startNDC: THREE.Vector2,
-    endNDC: THREE.Vector2,
-  ) => {
-    const { normal, point } = buildCutPlane(startNDC, endNDC);
-
-    // Check the line is long enough on screen
-    const screenLen = startNDC.distanceTo(endNDC);
-    if (screenLen < 0.15) return; // too short
-
-    try {
-      const evaluator = new Evaluator();
-      const appleGeo = new THREE.SphereGeometry(1.15, 64, 64);
-      const appleMesh = new Brush(appleGeo);
-
-      // Huge box as the cutting tool — one side of the plane
-      const boxSize = 6;
-      const boxGeo = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-      const boxMesh = new Brush(boxGeo);
-
-      // Position the cutting box: offset it along the normal so it covers one side
-      boxMesh.position.copy(point).addScaledVector(normal, boxSize / 2);
-      // Align box with the cut plane normal
-      const quat = new THREE.Quaternion().setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1),
-        normal,
-      );
-      boxMesh.quaternion.copy(quat);
-      boxMesh.updateMatrixWorld();
-      appleMesh.updateMatrixWorld();
-
-      const leftHalf = evaluator.evaluate(appleMesh, boxMesh, SUBTRACTION);
-      const rightHalf = evaluator.evaluate(appleMesh, boxMesh, ADDITION);
-
-      const leftGeo = (leftHalf as THREE.Mesh).geometry;
-      const rightGeo = (rightHalf as THREE.Mesh).geometry;
-
-      const leftVol = meshVolume(leftGeo);
-      const rightVol = meshVolume(rightGeo);
-      const total = leftVol + rightVol;
-
-      if (total < 0.01) {
-        onInvalidCut();
-        return;
-      }
-
-      const leftPct = (leftVol / total) * 100;
-      const rightPct = (rightVol / total) * 100;
-
-      // Direction for splitting: perpendicular to the cut in screen space
-      setHalves({
-        left: leftGeo,
-        right: rightGeo,
-        leftDir: normal.clone().negate(),
-        rightDir: normal.clone(),
-      });
-
-      setTimeout(() => setSplitting(true), 80);
-
-      onCut({ leftVolumePct: leftPct, rightVolumePct: rightPct });
-    } catch {
-      onInvalidCut();
-    }
-  }, [buildCutPlane, onCut, onInvalidCut]);
-
-  // Pointer events on the canvas
-  const toNDC = useCallback((clientX: number, clientY: number): THREE.Vector2 => {
+  // Helpers (safe to call inside effect — camera/gl refs are stable)
+  function toNDC(clientX: number, clientY: number) {
     const rect = gl.domElement.getBoundingClientRect();
     return new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
-  }, [gl]);
+  }
 
+  function getCutPlane(a: THREE.Vector2, b: THREE.Vector2) {
+    const unproject = (ndc: THREE.Vector2, z: number) =>
+      new THREE.Vector3(ndc.x, ndc.y, z).unproject(camera);
+    const a0 = unproject(a, 0);
+    const b0 = unproject(b, 0);
+    const a1 = unproject(a, 0.5);
+    const lineDir  = new THREE.Vector3().subVectors(b0, a0).normalize();
+    const depthDir = new THREE.Vector3().subVectors(a1, a0).normalize();
+    const normal   = new THREE.Vector3().crossVectors(lineDir, depthDir).normalize();
+    const point    = new THREE.Vector3().addVectors(a0, b0).multiplyScalar(0.5);
+    return { normal, point };
+  }
+
+  // Update preview blade each frame from drag ref (no state updates)
+  useFrame(() => {
+    if (!previewRef.current) return;
+    const d = drag.current;
+    if (!d || d.start.distanceTo(d.end) < 0.08) {
+      previewRef.current.visible = false;
+      return;
+    }
+    const { normal, point } = getCutPlane(d.start, d.end);
+    previewRef.current.visible = true;
+    previewRef.current.position.copy(point);
+    previewRef.current.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1),
+      normal,
+    );
+  });
+
+  // Pointer events — only active when phase === "idle"
   useEffect(() => {
+    if (phase !== "idle") return;
     const canvas = gl.domElement;
-    if (phase !== "idle" && phase !== "drawing") return;
+    let active = false;
 
     const onDown = (e: PointerEvent) => {
-      if (phase !== "idle") return;
       canvas.setPointerCapture(e.pointerId);
-      setDragStart(toNDC(e.clientX, e.clientY));
-      setDragEnd(toNDC(e.clientX, e.clientY));
+      const ndc = toNDC(e.clientX, e.clientY);
+      drag.current = { start: ndc, end: ndc.clone() };
+      active = true;
     };
+
     const onMove = (e: PointerEvent) => {
-      if (!dragStart) return;
-      setDragEnd(toNDC(e.clientX, e.clientY));
+      if (!active || !drag.current) return;
+      drag.current.end = toNDC(e.clientX, e.clientY);
     };
+
     const onUp = () => {
-      if (dragStart && dragEnd) {
-        performCut(dragStart, dragEnd);
+      if (!active || !drag.current) return;
+      active = false;
+      const { start, end } = drag.current;
+      drag.current = null;
+      if (previewRef.current) previewRef.current.visible = false;
+
+      if (start.distanceTo(end) < 0.12) return; // too short — ignore
+
+      try {
+        const { normal, point } = getCutPlane(start, end);
+        const evaluator = new Evaluator();
+        const BOX = 8;
+        const quat = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1),
+          normal,
+        );
+
+        // Half A: apple minus the box on the +normal side
+        const brushA = new Brush(new THREE.SphereGeometry(1.15, 64, 64));
+        const cuttingBoxA = new Brush(new THREE.BoxGeometry(BOX, BOX, BOX));
+        cuttingBoxA.position.copy(point).addScaledVector(normal, BOX / 2);
+        cuttingBoxA.quaternion.copy(quat);
+        brushA.updateMatrixWorld();
+        cuttingBoxA.updateMatrixWorld();
+        const resultA = evaluator.evaluate(brushA, cuttingBoxA, SUBTRACTION);
+
+        // Half B: apple minus the box on the -normal side
+        const brushB = new Brush(new THREE.SphereGeometry(1.15, 64, 64));
+        const cuttingBoxB = new Brush(new THREE.BoxGeometry(BOX, BOX, BOX));
+        cuttingBoxB.position.copy(point).addScaledVector(normal, -BOX / 2);
+        cuttingBoxB.quaternion.copy(quat);
+        brushB.updateMatrixWorld();
+        cuttingBoxB.updateMatrixWorld();
+        const resultB = evaluator.evaluate(brushB, cuttingBoxB, SUBTRACTION);
+
+        const geoA = (resultA as THREE.Mesh).geometry;
+        const geoB = (resultB as THREE.Mesh).geometry;
+        const volA = meshVolume(geoA);
+        const volB = meshVolume(geoB);
+        const total = volA + volB;
+
+        if (total < 0.01) { onInvalidCut(); return; }
+
+        setHalves({
+          geoA, geoB,
+          dirA: normal.clone().negate(),
+          dirB: normal.clone(),
+        });
+        setTimeout(() => setSplitting(true), 80);
+        onCut({
+          leftVolumePct:  (volA / total) * 100,
+          rightVolumePct: (volB / total) * 100,
+        });
+      } catch (err) {
+        console.error("CSG cut failed:", err);
+        onInvalidCut();
       }
-      setDragStart(null);
-      setDragEnd(null);
     };
 
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointerup",   onUp);
     return () => {
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointerup",   onUp);
     };
-  }, [phase, dragStart, dragEnd, toNDC, performCut, gl]);
-
-  // Preview plane while dragging
-  const previewPlane =
-    dragStart && dragEnd && dragStart.distanceTo(dragEnd) > 0.05
-      ? buildCutPlane(dragStart, dragEnd)
-      : null;
+  }, [phase, gl]); // only re-run when phase or gl changes
 
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[4, 6, 4]} intensity={1.8} castShadow />
-      <directionalLight position={[-3, -2, -3]} intensity={0.3} />
-      <Environment preset="city" />
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[4, 6, 5]} intensity={2} castShadow />
+      <directionalLight position={[-3, -2, -3]} intensity={0.4} />
 
       {/* Uncut apple */}
-      <AppleMesh visible={phase === "idle" || phase === "drawing"} />
+      <AppleMesh visible={!halves} />
 
       {/* Cut halves */}
       {halves && (
         <>
-          <CutHalf geometry={halves.left} direction={halves.leftDir} splitting={splitting} />
-          <CutHalf geometry={halves.right} direction={halves.rightDir} splitting={splitting} />
+          <Half geometry={halves.geoA} direction={halves.dirA} go={splitting} />
+          <Half geometry={halves.geoB} direction={halves.dirB} go={splitting} />
         </>
       )}
 
-      {/* Cut plane preview */}
-      {previewPlane && (
-        <CutPlanePreview
-          planeNormal={previewPlane.normal}
-          planePoint={previewPlane.point}
-          visible
+      {/* Drag preview blade */}
+      <mesh ref={previewRef} visible={false}>
+        <planeGeometry args={[5, 5]} />
+        <meshBasicMaterial
+          color="#b8f04a"
+          transparent
+          opacity={0.22}
+          side={THREE.DoubleSide}
+          depthWrite={false}
         />
-      )}
+      </mesh>
     </>
   );
 }
 
-// ── Exported canvas wrapper ───────────────────────────────────────────────────
-export default function AppleScene(props: AppleSceneProps) {
+// ── Canvas wrapper ────────────────────────────────────────────────────────────
+export default function AppleScene(props: Props) {
   return (
     <Canvas
-      shadows
       camera={{ position: [0, 0, 4.5], fov: 38 }}
       style={{
         width: "100%",
         height: "100%",
         borderRadius: "24px",
-        background: "#111",
+        background: "radial-gradient(ellipse at center, #1a1a1a 0%, #0d0d0d 100%)",
         border: "1px solid #2a2a2a",
-        cursor: props.phase === "idle" || props.phase === "drawing" ? "crosshair" : "default",
+        cursor: props.phase === "idle" ? "crosshair" : "default",
         touchAction: "none",
+        display: "block",
       }}
-      gl={{ antialias: true }}
+      gl={{ antialias: true, alpha: false }}
     >
       <Scene {...props} />
     </Canvas>
