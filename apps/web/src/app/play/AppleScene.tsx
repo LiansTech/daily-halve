@@ -110,15 +110,25 @@ function Scene({ phase, onCut, onInvalidCut }: Props) {
   }
 
   function getCutPlane(a: THREE.Vector2, b: THREE.Vector2) {
-    const unproject = (ndc: THREE.Vector2, z: number) =>
-      new THREE.Vector3(ndc.x, ndc.y, z).unproject(camera);
-    const a0 = unproject(a, 0);
-    const b0 = unproject(b, 0);
-    const a1 = unproject(a, 0.5);
-    const lineDir  = new THREE.Vector3().subVectors(b0, a0).normalize();
-    const depthDir = new THREE.Vector3().subVectors(a1, a0).normalize();
-    const normal   = new THREE.Vector3().crossVectors(lineDir, depthDir).normalize();
-    const point    = new THREE.Vector3().addVectors(a0, b0).multiplyScalar(0.5);
+    // Use near (-1) and far (1) NDC z for accurate world-space directions
+    const nearPt = (ndc: THREE.Vector2) => new THREE.Vector3(ndc.x, ndc.y, -1).unproject(camera);
+    const farPt  = (ndc: THREE.Vector2) => new THREE.Vector3(ndc.x, ndc.y,  1).unproject(camera);
+
+    // Line direction in world space
+    const lineDir = new THREE.Vector3().subVectors(nearPt(b), nearPt(a)).normalize();
+    // Camera look direction
+    const camDir  = new THREE.Vector3().subVectors(farPt(a), nearPt(a)).normalize();
+    // Cutting plane normal
+    const normal  = new THREE.Vector3().crossVectors(lineDir, camDir).normalize();
+
+    // Project the midpoint ray onto z=0 (the apple's world-space centre plane)
+    const midNDC  = new THREE.Vector2((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const midNear = nearPt(midNDC);
+    const midDir  = new THREE.Vector3().subVectors(farPt(midNDC), midNear).normalize();
+    // Ray: midNear + t * midDir, solve for P.z = 0
+    const t = (0 - midNear.z) / midDir.z;
+    const point = midNear.clone().addScaledVector(midDir, t);
+
     return { normal, point };
   }
 

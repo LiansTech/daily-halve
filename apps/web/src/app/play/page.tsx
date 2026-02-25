@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { Fragment, useState, useCallback } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import styles from "./page.module.css";
@@ -60,10 +60,10 @@ function BalanceScale({ leftPct, rightPct, visible }: {
       <line x1={lx} y1={ly} x2={rx} y2={ry} stroke="#4a4a4a" strokeWidth="2.5" strokeLinecap="round" style={{ transition: tr }} />
       <circle cx={PX} cy={PY} r={5} fill="#555" />
       {[{ x: lx, y: ly }, { x: rx, y: ry }].map((p, i) => (
-        <>
-          <line key={`sl${i}`} x1={p.x-15} y1={p.y+17} x2={p.x} y2={p.y} stroke="#4a4a4a" strokeWidth="1.5" style={{ transition: tr }} />
-          <line key={`sr${i}`} x1={p.x+15} y1={p.y+17} x2={p.x} y2={p.y} stroke="#4a4a4a" strokeWidth="1.5" style={{ transition: tr }} />
-        </>
+        <Fragment key={i}>
+          <line x1={p.x-15} y1={p.y+17} x2={p.x} y2={p.y} stroke="#4a4a4a" strokeWidth="1.5" style={{ transition: tr }} />
+          <line x1={p.x+15} y1={p.y+17} x2={p.x} y2={p.y} stroke="#4a4a4a" strokeWidth="1.5" style={{ transition: tr }} />
+        </Fragment>
       ))}
       <path d={`M${lx-PAN_R},${ly+17} Q${lx},${ly+17+PAN_DEPTH} ${lx+PAN_R},${ly+17}`} stroke={lColor} strokeWidth="2" fill="none" style={{ transition: tr }} />
       <path d={`M${rx-PAN_R},${ry+17} Q${rx},${ry+17+PAN_DEPTH} ${rx+PAN_R},${ry+17}`} stroke={rColor} strokeWidth="2" fill="none" style={{ transition: tr }} />
