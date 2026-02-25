@@ -17,6 +17,29 @@ interface Props {
   onInvalidCut: () => void;
 }
 
+// ── Blob geometry — irregular sphere with layered sine displacement ───────────
+function makeBlobGeometry(): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(1.1, 80, 80);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const len = Math.sqrt(x * x + y * y + z * z);
+    if (len === 0) continue;
+    const nx = x / len, ny = y / len, nz = z / len;
+    // Multiple frequencies for an organic, uneven look
+    const d =
+      0.20 * Math.sin(nx * 3.1 + ny * 2.4) +
+      0.14 * Math.sin(ny * 5.7 + nz * 3.8 + 1.2) +
+      0.10 * Math.sin(nz * 4.3 + nx * 6.1 + 2.5) +
+      0.07 * Math.cos(nx * 8.2 + ny * 5.9 + nz * 4.1) +
+      0.04 * Math.sin(nx * 11.0 + nz * 9.3 + ny * 7.6);
+    const r = len + d;
+    pos.setXYZ(i, nx * r, ny * r, nz * r);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 // ── Signed-tetrahedra volume (works on indexed geometry) ──────────────────────
 function meshVolume(geo: THREE.BufferGeometry): number {
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
@@ -38,16 +61,17 @@ function meshVolume(geo: THREE.BufferGeometry): number {
   return Math.abs(v) / 6;
 }
 
-// ── Apple ─────────────────────────────────────────────────────────────────────
-function AppleMesh({ visible }: { visible: boolean }) {
+// ── Blob mesh ─────────────────────────────────────────────────────────────────
+const blobGeo = makeBlobGeometry(); // shared — created once
+
+function BlobMesh({ visible }: { visible: boolean }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
-    if (ref.current && visible) ref.current.rotation.y += dt * 0.5;
+    if (ref.current && visible) ref.current.rotation.y += dt * 0.4;
   });
   return (
-    <mesh ref={ref} visible={visible}>
-      <sphereGeometry args={[1.15, 64, 64]} />
-      <meshStandardMaterial color="#bf4730" roughness={0.3} metalness={0.08} />
+    <mesh ref={ref} geometry={blobGeo} visible={visible}>
+      <meshStandardMaterial color="#c47a3a" roughness={0.55} metalness={0.04} />
     </mesh>
   );
 }
@@ -75,9 +99,9 @@ function Half({
   return (
     <mesh ref={ref} geometry={geometry}>
       <meshStandardMaterial
-        color="#bf4730"
-        roughness={0.3}
-        metalness={0.08}
+        color="#c47a3a"
+        roughness={0.55}
+        metalness={0.04}
         side={THREE.DoubleSide}
       />
     </mesh>
@@ -185,8 +209,8 @@ function Scene({ phase, onCut, onInvalidCut }: Props) {
           normal,
         );
 
-        // Half A: apple minus the box on the +normal side
-        const brushA = new Brush(new THREE.SphereGeometry(1.15, 64, 64));
+        // Half A: object minus the box on the +normal side
+        const brushA = new Brush(makeBlobGeometry());
         const cuttingBoxA = new Brush(new THREE.BoxGeometry(BOX, BOX, BOX));
         cuttingBoxA.position.copy(point).addScaledVector(normal, BOX / 2);
         cuttingBoxA.quaternion.copy(quat);
@@ -194,8 +218,8 @@ function Scene({ phase, onCut, onInvalidCut }: Props) {
         cuttingBoxA.updateMatrixWorld();
         const resultA = evaluator.evaluate(brushA, cuttingBoxA, SUBTRACTION);
 
-        // Half B: apple minus the box on the -normal side
-        const brushB = new Brush(new THREE.SphereGeometry(1.15, 64, 64));
+        // Half B: object minus the box on the -normal side
+        const brushB = new Brush(makeBlobGeometry());
         const cuttingBoxB = new Brush(new THREE.BoxGeometry(BOX, BOX, BOX));
         cuttingBoxB.position.copy(point).addScaledVector(normal, -BOX / 2);
         cuttingBoxB.quaternion.copy(quat);
@@ -243,8 +267,8 @@ function Scene({ phase, onCut, onInvalidCut }: Props) {
       <directionalLight position={[4, 6, 5]} intensity={2} castShadow />
       <directionalLight position={[-3, -2, -3]} intensity={0.4} />
 
-      {/* Uncut apple */}
-      <AppleMesh visible={!halves} />
+      {/* Uncut blob */}
+      <BlobMesh visible={!halves} />
 
       {/* Cut halves */}
       {halves && (

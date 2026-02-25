@@ -191,7 +191,7 @@ export default function PlayPage() {
 
       <header className={styles.header}>
         <Link href="/" className={styles.backBtn}>← Back</Link>
-        <span className={styles.dayLabel}>Day #1 · Apple</span>
+        <span className={styles.dayLabel}>Day #1</span>
         <div />
       </header>
 
